@@ -96,7 +96,7 @@ The easiest way to get started is to play with the Python notebooks in the [exam
 
 *Depending on how the top-level flags are set, this notebook runs PLR, Robust PLR, Parallel PLR, ACCEL, or Parallel ACCEL.
 
-`minimax` comes with high-performing hyperparameter configurations for several aglorithms, including domain randomization (DR), PAIRED, PLR, and ACCEL for 60-block mazes. You can train using these settings by first creating the training command for executing `minimax.train` using the convenience script [`minimax.config.make_cmd`](docs/make_cmd.md):
+`minimax` comes with high-performing hyperparameter configurations for several algorithms, including domain randomization (DR), PAIRED, PLR, and ACCEL for 60-block mazes. You can train using these settings by first creating the training command for executing `minimax.train` using the convenience script [`minimax.config.make_cmd`](docs/make_cmd.md):
 
 `python -m minimax.config.make_cmd --config maze/[dr,paired,plr,accel] | pbcopy`,
 
