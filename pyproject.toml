@@ -1,0 +1,35 @@
+[project]
+name = "minimax-lib"
+version = "0.1.0"
+authors = [
+  {name="Minqi Jiang"}, 
+  {email="msj@meta.com"},
+]
+description = "Efficient baselines for autocurricula in JAX"
+readme = "README.md"
+license = {text = "Apache 2.0"}
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+  "numpy>=1.25,<1.26",
+  "pandas==1.5.3",
+  "jax>=0.4.19",
+  "jaxlib>=0.4.19",
+  "flax>=0.7.4",
+  "optax>=0.1.7",
+  "chex>=0.1.83",
+  "wandb>=0.13",
+  "ipython>=7.34.0",
+  "GitPython>=3.1.29"
+]
+
+[tool.hatchling.scripts]
+train = "minimax.train:main"
+evaluate = "minimax.evaluate:main"
+make_cmd = "minimax.config.make_cmd:main"
+
+[tool.setuptools.package-data]
+"minimax.config.configs" = ["**"]
