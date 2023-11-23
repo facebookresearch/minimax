@@ -29,7 +29,7 @@
 
 ## 🐢 Why `minimax`?
 
-Unsupervised Environment Design (UED) is a promising approach to generating autocurricula for training robust deep reinforcement learning (RL) agents. However, existing implementations of common baselines require excessive amounts of compute. In some cases, experiments can require more than a week to complete using V100 GPUs. **This long turn-around slows the rate of research progress in autocuriculum methods**. `minimax` provides fast, [JAX-based](https://github.com/google/jax) implementations of key UED baselines, which are based on the concept of _minimax_ regret. By making use of fully-tensorized environment implementations, `minimax` baselines are are fully-jittable and thus take total advantage of the hardware acceleration offered by JAX. In timing studies done on V100 GPUs and Xeon E5-2698 v4 CPUs, we find `minimax` baselines can run **over 100x faster than the previous reference implementations** on the same single-GPU hardware, like those in [facebookresearch/dcd](https://github.com/facebookresearch/dcd).
+Unsupervised Environment Design (UED) is a promising approach to generating autocurricula for training robust deep reinforcement learning (RL) agents. However, existing implementations of common baselines require excessive amounts of compute. In some cases, experiments can require more than a week to complete using V100 GPUs. **This long turn-around slows the rate of research progress in autocuriculum methods**. `minimax` provides fast, [JAX-based](https://github.com/google/jax) implementations of key UED baselines, which are based on the concept of _minimax_ regret. By making use of fully-tensorized environment implementations, `minimax` baselines are fully-jittable and thus take full advantage of the hardware acceleration offered by JAX. In timing studies done on V100 GPUs and Xeon E5-2698 v4 CPUs, we find `minimax` baselines can run **over 100x faster than previous reference implementations**, like those in [facebookresearch/dcd](https://github.com/facebookresearch/dcd).
 
 All autocurriculum algorithms implemented in `minimax` also support multi-device training, which can be activated through a [single command line flag](#multi-device-training). Using multiple devices for training can lead to further speed ups and allows scaling these autocurriculum methods to much larger batch sizes.
 
@@ -96,7 +96,7 @@ The easiest way to get started is to play with the Python notebooks in the [exam
 
 *Depending on how the top-level flags are set, this notebook runs PLR, Robust PLR, Parallel PLR, ACCEL, or Parallel ACCEL.
 
-`minimax` comes with high-performing hyperparameter configurations for several aglorithms, including domain randomization (DR), PAIRED, PLR, and ACCEL for 60-block mazes. You can train using these settings by first creating the training command for executing `minimax.train` using the convenience script [`minimax.config.make_cmd`](docs/make_cmd.md):
+`minimax` comes with high-performing hyperparameter configurations for several algorithms, including domain randomization (DR), PAIRED, PLR, and ACCEL for 60-block mazes. You can train using these settings by first creating the training command for executing `minimax.train` using the convenience script [`minimax.config.make_cmd`](docs/make_cmd.md):
 
 `python -m minimax.config.make_cmd --config maze/[dr,paired,plr,accel] | pbcopy`,
 
@@ -147,11 +147,11 @@ The below table summarizes how various autocurriculum methods map to these runne
 | Parallel PLR      | [Jiang et al, 2023](https://openreview.net/forum?id=vxZgTbmC4L) | `PLRRunner`    | `plr_use_parallel_eval=True` |
 | Parallel ACCEL    | [Jiang et al, 2023](https://openreview.net/forum?id=vxZgTbmC4L) | `PLRRunner`    | `plr_use_parallel_eval=True`, `plr_mutation_fn != None`, `plr_n_mutations > 0`|
 
-[See the docs](docs/train_args.md) on `minimax.train` for a comprehensive guide on how to configure command line arguments for running various autocurricula methods via `minimax.train`.
+[See the docs](docs/train_args.md) on `minimax.train` for a comprehensive guide on how to configure command-line arguments for running various autocurricula methods via `minimax.train`.
 
 ### Logging
 
-By default, `minimax.train` generates a folder in the directory specified by the `--log_dir` argument, named according to `--xpid`. This folder contains the main training logs, `logs.csv`, and periodic screenshots of generated levels in the directory `screenshots`. Each screenshot uses the naming convention `update_<number of PPO updates>.png`. When ACCEL is turned on, the screenshot naming convention also includes information about whether the level was replayed via PLR and the mutation generation number for the level, i.e. how many mutation cycles led to this level.
+By default, `minimax.train` generates a folder in the directory specified by the `--log_dir` argument, named according to `--xpid`. This folder contains the main training logs, `logs.csv`, which are updated with a new row every `--log_interval` rollout cycles.
 
 ### Checkpointing
 
@@ -159,11 +159,11 @@ By default, `minimax.train` generates a folder in the directory specified by the
 The latest model checkpoint is saved as `checkpoint.pkl`. The model is checkpointed every `--checkpoint_interval` number of updates, where each update corresponds to a full rollout and update cycle for each participating agent. For the same number of environment interaction steps, methods may differ in the number of gradient updates performed by participating agents, so checkpointing based on number of update cycles controls for this potential discrepency. For example, methods based on Robust PLR, like ACCEL, do not perform student gradient updates every rollout cycle.
 
 **Archived checkpoints:**
-Separate archived model checkpoints can be saved at specific intervals by specifying a positive value for the argument `--archive_interval`. For example, setting `--archive_interval=1000`  will result in saving model checkpoints for every 1000 updates, named `checkpoint_1000.tar`, `checkpoint_2000.tar`, and so on. These archived models are saved in addition to `checkpoint.pkl`, which always stores the latest checkpoint, based on `--checkpoint_interval`.
+Separate archived model checkpoints can be saved at specific intervals by specifying a positive value for the argument `--archive_interval`. For example, setting `--archive_interval=1000`  will result in saving model checkpoints every 1000 updates, named `checkpoint_1000.tar`, `checkpoint_2000.tar`, and so on. These archived models are saved in addition to `checkpoint.pkl`, which always stores the latest checkpoint, based on `--checkpoint_interval`.
 
 ### Evaluating
 
-Once training completes, you can evaluate the resulting `checkpoint.pkl` on test environments using `minimax.eval`. This script can evaluate an individual checkpoint or group of checkpoints created via training runs with a shared experiment ID prefix (`--xpid` value), e.g. each corresponding to different training seeds of the same experiment configuration. Each checkpoint is evaluated over `--n_episodes` episodes for each of the test environments, specified via a csv string of test environment names passed in via `--env_names`. The evaluation results can be optionally written to a csv file in `--results_path`, if a `--results_fname` is provided. 
+Once training completes, you can evaluate the resulting `checkpoint.pkl` on test environments using `minimax.evaluate`. This script can evaluate an individual checkpoint or group of checkpoints created via training runs with a shared experiment ID prefix (`--xpid` value), e.g. each corresponding to different training seeds of the same experiment configuration. Each checkpoint is evaluated over `--n_episodes` episodes for each of the test environments, specified via a csv string of test environment names passed in via `--env_names`. The evaluation results can be optionally written to a csv file in `--results_path`, if a `--results_fname` is provided. 
 
 [See the docs](docs/evaluate_args.md) on `minimax.evaluation` for a comprehensive guide on how to configure command line arguments for `minimax.evaluate`.
 

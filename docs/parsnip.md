@@ -60,7 +60,7 @@ radish_subparser.add_argument(
     '--is_pickled'
     type=str2bool,
     default=False,
-    help='Whether my farm produces picked radish.')
+    help='Whether my farm produces pickled radish.')
 
 # Create another conditional argument group
 apple_subparser = parser.add_subparser(
@@ -73,7 +73,7 @@ apple_subparser.add_argument(
     type=str,
     choices=['fuji', 'mcintosh'],
     default='fuji',
-    help='Whether my farm produces picked radish.')
+    help='Whether my farm produces pickled radish.')
 
 args = parser.parse_args()
 ```
