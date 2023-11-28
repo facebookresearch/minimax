@@ -89,8 +89,6 @@ class RolloutStorage:
 			carry_buffer = None
 		else:
 			carry_buffer = self.empty_carry
-			if len(carry_buffer) == 1:
-				carry_buffer = carry_buffer[0]
 
 		value_batch_size = (self.flat_batch_size,)
 		if self.value_ensemble_size > 1:
