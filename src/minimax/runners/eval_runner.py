@@ -193,9 +193,10 @@ class EvalRunner:
                 done, zero_carry, next_carry)
 
         if self.render_mode:
+            parent_env_name = benv.env_name.split('-')[0]
             self.viz.render(
                 benv.env.params, 
-                jax.tree_util.tree_map(lambda x: x[0][0], state))
+                jax.tree_util.tree_map(lambda x: x[0][0], state), parent_env_name, reward)
             if self.render_mode == 'ipython':
                 self.ipython_display.display(self.viz.window.fig)
                 self.ipython_display.clear_output(wait=True)

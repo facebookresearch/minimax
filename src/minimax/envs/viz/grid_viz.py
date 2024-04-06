@@ -19,6 +19,7 @@ import numpy as np
 from minimax.envs.viz.window import Window
 import minimax.envs.viz.grid_rendering as rendering
 from minimax.envs.maze.maze import OBJECT_TO_INDEX, COLOR_TO_INDEX, COLORS
+from gymnax.visualize import Visualizer
 
 
 INDEX_TO_COLOR = [k for k,v in COLOR_TO_INDEX.items()]
@@ -46,8 +47,14 @@ class GridVisualizer:
 		self._lazy_init_window()
 		self.window.save_img(path)
 
-	def render(self, params, state, highlight=True, tile_size=TILE_PIXELS, maze_map=None):
-		return self._render_state(params, state, highlight, tile_size, maze_map)
+	def render(self, params, state, parent_env_name= 'Maze', reward = 0, highlight=True, tile_size=TILE_PIXELS, maze_map=None):
+		if(parent_env_name == 'Maze'):
+			return self._render_state(params, state, highlight, tile_size, maze_map)
+		elif(parent_env_name == 'MountainCar'):
+			parent_env_name = 'MountainCar-v0'
+			vis = Visualizer(parent_env_name, params, [state], [reward])
+			vis.animate(f"docs/{parent_env_name}.gif")
+		
 
 	def render_grid(self, grid, tile_size=TILE_PIXELS, k_rot90=0, agent_dir_idx=None):
 		self._lazy_init_window()
