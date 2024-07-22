@@ -13,19 +13,20 @@ class Agent(ABC):
     """
     Generic interface for an agent.
     """
+
     @property
     def is_recurrent(self):
         pass
 
     @property
     def action_info_keys(self):
-    	pass
+        pass
 
     def init_params(self, rng, obs, carry=None):
         pass
 
     def init_carry(self, rng, batch_dims):
-        pass 
+        pass
 
     def act(self, *args, **kwargs):
         pass

@@ -16,7 +16,7 @@ class DotDict(dict):
 
     def __init__(self, dct):
         for key, value in dct.items():
-            if hasattr(value, 'keys'):
+            if hasattr(value, "keys"):
                 value = DotDict(value)
             self[key] = value
 
@@ -47,19 +47,16 @@ class DefaultDotDict(dict):
         self._default = state[1]
 
     def __setattr__(self, name, value):
-        if name == '_default':
-            super().__setattr__('_default', value)
+        if name == "_default":
+            super().__setattr__("_default", value)
         else:
             self.__setitem__(name, value)
 
     def __deepcopy__(self, memo):
-        return DefaultDotDict(
-            copy.deepcopy(dict(self)), 
-            default=self._default
-        )
+        return DefaultDotDict(copy.deepcopy(dict(self)), default=self._default)
 
     def __getattr__(self, name):
-        if name == '_default':
+        if name == "_default":
             return self._default
         else:
             try:

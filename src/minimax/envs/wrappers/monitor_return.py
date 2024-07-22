@@ -17,54 +17,49 @@ from minimax.envs.environment import EnvState
 
 
 class MonitorReturnWrapper(EnvWrapper):
-	"""
-	Tracks episodic returns and, optionally, environment metrics.
-	"""
-	def reset_extra(self):
-		if self._wrap_level > 1:
-			extra = self._env.reset_extra()
-		else:
-			extra = {}
+    """
+    Tracks episodic returns and, optionally, environment metrics.
+    """
 
-		extra.update({
-			'ep_return': 0.,
-		})
+    def reset_extra(self):
+        if self._wrap_level > 1:
+            extra = self._env.reset_extra()
+        else:
+            extra = {}
 
-		return extra
+        extra.update(
+            {
+                "ep_return": 0.0,
+            }
+        )
 
-	def get_monitored_metrics(self):
-		return super().get_monitored_metrics() + ('return',)
+        return extra
 
-	def step(
-		self,
-		key: chex.PRNGKey,
-		state: EnvState,
-		action: Union[int, float],
-		reset_state: Optional[chex.ArrayTree] = None,
-		extra: dict = None,
-	) -> Tuple[chex.Array, EnvState, float, bool]:
-		step_kwargs = dict(
-			reset_state=reset_state
-		)
-		if self._wrap_level > 1:
-			step_kwargs.update(dict(
-				extra=extra
-			))
+    def get_monitored_metrics(self):
+        return super().get_monitored_metrics() + ("return",)
 
-		step = self._env.step(
-				key, 
-				state, 
-				action, 
-				**step_kwargs)
+    def step(
+        self,
+        key: chex.PRNGKey,
+        state: EnvState,
+        action: Union[int, float],
+        reset_state: Optional[chex.ArrayTree] = None,
+        extra: dict = None,
+    ) -> Tuple[chex.Array, EnvState, float, bool]:
+        step_kwargs = dict(reset_state=reset_state)
+        if self._wrap_level > 1:
+            step_kwargs.update(dict(extra=extra))
 
-		if len(step) == 5:
-			obs, state, reward, done, info = step
-		else:
-			obs, state, reward, done, info, extra = step
+        step = self._env.step(key, state, action, **step_kwargs)
 
-		# Track returns
-		extra['ep_return'] += reward
-		info['return'] = done*extra['ep_return']
-		extra['ep_return'] *= (1-done)
+        if len(step) == 5:
+            obs, state, reward, done, info = step
+        else:
+            obs, state, reward, done, info, extra = step
 
-		return obs, state, reward, done, info, extra
+        # Track returns
+        extra["ep_return"] += reward
+        info["return"] = done * extra["ep_return"]
+        extra["ep_return"] *= 1 - done
+
+        return obs, state, reward, done, info, extra

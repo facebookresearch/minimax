@@ -10,14 +10,14 @@ from .registration import register, make
 
 
 from .maze import (
-	GridWorldACStudentModel, 
-	GridWorldACTeacherModel,
+    GridWorldACStudentModel,
+    GridWorldACTeacherModel,
 )
 
 
 __all__ = [
-	register,
-	make,
-	GridWorldACStudentModel,
-	GridWorldACTeacherModel,
+    register,
+    make,
+    GridWorldACStudentModel,
+    GridWorldACTeacherModel,
 ]

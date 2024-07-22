@@ -13,10 +13,4 @@ from .plr_runner import PLRRunner
 from .paired_runner import PAIREDRunner
 
 
-__all__ = [
-	ExperimentRunner,
-	EvalRunner,
-	DRRunner,
-	PLRRunner,
-	PAIREDRunner
-]
+__all__ = [ExperimentRunner, EvalRunner, DRRunner, PLRRunner, PAIREDRunner]

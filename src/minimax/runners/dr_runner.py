@@ -21,426 +21,455 @@ from flax.core.frozen_dict import FrozenDict
 
 import minimax.envs as envs
 from minimax.util import pytree as _tree_util
-from minimax.util.rl import (
-	AgentPop,
-	VmapTrainState,
-	RolloutStorage,
-	RollingStats
-)
+from minimax.util.rl import AgentPop, VmapTrainState, RolloutStorage, RollingStats
 
 
 class DRRunner:
-	"""
-	Orchestrates rollouts across one or more students. 
-	The main components at play:
-	- AgentPop: Manages train state and batched inference logic 
-		for a population of agents.
-	- BatchEnv: Manages environment step and reset logic, using a 
-		populaton of agents.
-	- RolloutStorage: Manages the storing and sampling of collected txns.
-	- PPO: Handles PPO updates, which take a train state + batch of txns.
-	"""
-	def __init__(
-		self, 
-		env_name,
-		env_kwargs,
-		student_agents,
-		n_students=1,
-		n_parallel=1,
-		n_eval=1,
-		n_rollout_steps=256,
-		lr=1e-4,
-		lr_final=None,
-		lr_anneal_steps=0,
-		max_grad_norm=0.5,
-		discount=0.99,
-		gae_lambda=0.95,
-		adam_eps=1e-5,
-		normalize_return=False,
-		track_env_metrics=False,
-		n_unroll_rollout=1,
-		n_devices=1,
-		render=False):
+    """
+    Orchestrates rollouts across one or more students.
+    The main components at play:
+    - AgentPop: Manages train state and batched inference logic
+            for a population of agents.
+    - BatchEnv: Manages environment step and reset logic, using a
+            populaton of agents.
+    - RolloutStorage: Manages the storing and sampling of collected txns.
+    - PPO: Handles PPO updates, which take a train state + batch of txns.
+    """
 
-		assert len(student_agents) == 1, 'Only one type of student supported.'
-		assert n_parallel % n_devices == 0, 'Num envs must be divisible by num devices.'
+    def __init__(
+        self,
+        env_name,
+        env_kwargs,
+        student_agents,
+        n_students=1,
+        n_parallel=1,
+        n_eval=1,
+        n_rollout_steps=256,
+        lr=1e-4,
+        lr_final=None,
+        lr_anneal_steps=0,
+        max_grad_norm=0.5,
+        discount=0.99,
+        gae_lambda=0.95,
+        adam_eps=1e-5,
+        normalize_return=False,
+        track_env_metrics=False,
+        n_unroll_rollout=1,
+        n_devices=1,
+        render=False,
+    ):
 
-		self.n_students = n_students
-		self.n_parallel = n_parallel // n_devices
-		self.n_eval = n_eval
-		self.n_devices = n_devices
-		self.step_batch_size = n_students*n_eval*n_parallel
-		self.n_rollout_steps = n_rollout_steps
-		self.n_updates = 0
-		self.lr = lr
-		self.lr_final = lr if lr_final is None else lr_final
-		self.lr_anneal_steps = lr_anneal_steps
-		self.max_grad_norm = max_grad_norm
-		self.adam_eps = adam_eps
-		self.normalize_return = normalize_return
-		self.track_env_metrics = track_env_metrics
-		self.n_unroll_rollout = n_unroll_rollout
-		self.render = render
+        assert len(student_agents) == 1, "Only one type of student supported."
+        assert n_parallel % n_devices == 0, "Num envs must be divisible by num devices."
 
-		self.student_pop = AgentPop(student_agents[0], n_agents=n_students)
+        self.n_students = n_students
+        self.n_parallel = n_parallel // n_devices
+        self.n_eval = n_eval
+        self.n_devices = n_devices
+        self.step_batch_size = n_students * n_eval * n_parallel
+        self.n_rollout_steps = n_rollout_steps
+        self.n_updates = 0
+        self.lr = lr
+        self.lr_final = lr if lr_final is None else lr_final
+        self.lr_anneal_steps = lr_anneal_steps
+        self.max_grad_norm = max_grad_norm
+        self.adam_eps = adam_eps
+        self.normalize_return = normalize_return
+        self.track_env_metrics = track_env_metrics
+        self.n_unroll_rollout = n_unroll_rollout
+        self.render = render
 
-		self.env, self.env_params = envs.make(
-			env_name, 
-			env_kwargs=env_kwargs
-		)
-		self._action_shape = self.env.action_space().shape
+        self.student_pop = AgentPop(student_agents[0], n_agents=n_students)
 
-		self.benv = envs.BatchEnv(
-			env_name=env_name,
-			n_parallel=self.n_parallel,
-			n_eval=self.n_eval,
-			env_kwargs=env_kwargs,
-			wrappers=['monitor_return', 'monitor_ep_metrics']
-		)
-		self.action_dtype = self.benv.env.action_space().dtype
+        self.env, self.env_params = envs.make(env_name, env_kwargs=env_kwargs)
+        self._action_shape = self.env.action_space().shape
 
-		self.student_rollout = RolloutStorage(
-			discount=discount,
-			gae_lambda=gae_lambda,
-			n_steps=n_rollout_steps,
-			n_agents=n_students,
-			n_envs=self.n_parallel,
-			n_eval=self.n_eval,
-			action_space=self.env.action_space(),
-			obs_space=self.env.observation_space(),
-			agent=self.student_pop.agent,
-		)
+        self.benv = envs.BatchEnv(
+            env_name=env_name,
+            n_parallel=self.n_parallel,
+            n_eval=self.n_eval,
+            env_kwargs=env_kwargs,
+            wrappers=["monitor_return", "monitor_ep_metrics"],
+        )
+        self.action_dtype = self.benv.env.action_space().dtype
 
-		monitored_metrics = self.benv.env.get_monitored_metrics()
-		self.rolling_stats = RollingStats(
-			names=monitored_metrics,
-			window=10,
-		)
-		self._update_ep_stats = jax.vmap(jax.vmap(self.rolling_stats.update_stats))
+        self.student_rollout = RolloutStorage(
+            discount=discount,
+            gae_lambda=gae_lambda,
+            n_steps=n_rollout_steps,
+            n_agents=n_students,
+            n_envs=self.n_parallel,
+            n_eval=self.n_eval,
+            action_space=self.env.action_space(),
+            obs_space=self.env.observation_space(),
+            agent=self.student_pop.agent,
+        )
 
-		if self.render:
-			from envs.viz.grid_viz import GridVisualizer
-			self.viz = GridVisualizer()
-			self.viz.show()
+        monitored_metrics = self.benv.env.get_monitored_metrics()
+        self.rolling_stats = RollingStats(
+            names=monitored_metrics,
+            window=10,
+        )
+        self._update_ep_stats = jax.vmap(jax.vmap(self.rolling_stats.update_stats))
 
-	def reset(self, rng):
-		self.n_updates = 0
+        if self.render:
+            from envs.viz.grid_viz import GridVisualizer
 
-		n_parallel = self.n_parallel*self.n_devices
+            self.viz = GridVisualizer()
+            self.viz.show()
 
-		rngs, *vrngs = jax.random.split(rng, self.n_students+1)
-		obs, state, extra = self.benv.reset(jnp.array(vrngs), n_parallel=n_parallel)
-		dummy_obs = jax.tree_util.tree_map(lambda x: x[0], obs) # for one agent only
+    def reset(self, rng):
+        self.n_updates = 0
 
-		rng, subrng = jax.random.split(rng)
-		if self.student_pop.agent.is_recurrent:
-			carry = self.student_pop.init_carry(subrng, obs)
-			self.zero_carry = jax.tree_map(lambda x: x.at[:,:self.n_parallel].get(), carry)
-		else:
-			carry = None
+        n_parallel = self.n_parallel * self.n_devices
 
-		rng, subrng = jax.random.split(rng)
-		params = self.student_pop.init_params(subrng, dummy_obs)
+        rngs, *vrngs = jax.random.split(rng, self.n_students + 1)
+        obs, state, extra = self.benv.reset(jnp.array(vrngs), n_parallel=n_parallel)
+        dummy_obs = jax.tree_util.tree_map(lambda x: x[0], obs)  # for one agent only
 
-		schedule_fn = optax.linear_schedule(
-			init_value=-float(self.lr),
-			end_value=-float(self.lr_final),
-			transition_steps=self.lr_anneal_steps,
-		)
+        rng, subrng = jax.random.split(rng)
+        if self.student_pop.agent.is_recurrent:
+            carry = self.student_pop.init_carry(subrng, obs)
+            self.zero_carry = jax.tree_map(
+                lambda x: x.at[:, : self.n_parallel].get(), carry
+            )
+        else:
+            carry = None
 
-		tx = optax.chain(
-			optax.clip_by_global_norm(self.max_grad_norm),
-			optax.adam(learning_rate=float(self.lr), eps=self.adam_eps)
-		)
+        rng, subrng = jax.random.split(rng)
+        params = self.student_pop.init_params(subrng, dummy_obs)
 
-		train_state = VmapTrainState.create(
-			apply_fn=self.student_pop.agent.evaluate,
-			params=params,
-			tx=tx
-		)
+        schedule_fn = optax.linear_schedule(
+            init_value=-float(self.lr),
+            end_value=-float(self.lr_final),
+            transition_steps=self.lr_anneal_steps,
+        )
 
-		ep_stats = self.rolling_stats.reset_stats(
-			batch_shape=(self.n_students, n_parallel*self.n_eval))
+        tx = optax.chain(
+            optax.clip_by_global_norm(self.max_grad_norm),
+            optax.adam(learning_rate=float(self.lr), eps=self.adam_eps),
+        )
 
-		start_state = state
+        train_state = VmapTrainState.create(
+            apply_fn=self.student_pop.agent.evaluate, params=params, tx=tx
+        )
 
-		return (
-			rng, 
-			train_state, 
-			state,
-			start_state, # Used to track metrics from starting state
-			obs, 
-			carry, 
-			extra, 
-			ep_stats
-		)
+        ep_stats = self.rolling_stats.reset_stats(
+            batch_shape=(self.n_students, n_parallel * self.n_eval)
+        )
 
-	def get_checkpoint_state(self, state):
-		_state = list(state)
-		_state[1] = state[1].state_dict
+        start_state = state
 
-		return _state
+        return (
+            rng,
+            train_state,
+            state,
+            start_state,  # Used to track metrics from starting state
+            obs,
+            carry,
+            extra,
+            ep_stats,
+        )
 
-	def load_checkpoint_state(self, runner_state, state):
-		runner_state = list(runner_state)
-		runner_state[1] = runner_state[1].load_state_dict(state[1])
+    def get_checkpoint_state(self, state):
+        _state = list(state)
+        _state[1] = state[1].state_dict
 
-		return tuple(runner_state)
+        return _state
 
-	@partial(jax.jit, static_argnums=(0,2))
-	def _get_transition(
-		self, 
-		rng, 
-		pop, 
-		params, 
-		rollout, 
-		state, 
-		start_state, 
-		obs, 
-		carry, 
-		done,
-		extra=None):
-		# Sample action
-		value, pi_params, next_carry = pop.act(params, obs, carry, done)
+    def load_checkpoint_state(self, runner_state, state):
+        runner_state = list(runner_state)
+        runner_state[1] = runner_state[1].load_state_dict(state[1])
 
-		pi = pop.get_action_dist(pi_params, dtype=self.action_dtype)
-		rng, subrng = jax.random.split(rng)
-		action = pi.sample(seed=subrng)
-		log_pi = pi.log_prob(action)
+        return tuple(runner_state)
 
-		rng, *vrngs = jax.random.split(rng, self.n_students+1)
-		(next_obs, 
-		 next_state, 
-		 reward, 
-		 done, 
-		 info, 
-		 extra) = self.benv.step(jnp.array(vrngs), state, action, extra)
+    @partial(jax.jit, static_argnums=(0, 2))
+    def _get_transition(
+        self,
+        rng,
+        pop,
+        params,
+        rollout,
+        state,
+        start_state,
+        obs,
+        carry,
+        done,
+        extra=None,
+    ):
+        # Sample action
+        value, pi_params, next_carry = pop.act(params, obs, carry, done)
 
-		next_start_state = jax.vmap(_tree_util.pytree_select)(
-			done, next_state, start_state
-		)
+        pi = pop.get_action_dist(pi_params, dtype=self.action_dtype)
+        rng, subrng = jax.random.split(rng)
+        action = pi.sample(seed=subrng)
+        log_pi = pi.log_prob(action)
 
-		# Add transition to storage
-		step = (obs, action, reward, done, log_pi, value)
-		if carry is not None:
-			step += (carry,)
+        rng, *vrngs = jax.random.split(rng, self.n_students + 1)
+        (next_obs, next_state, reward, done, info, extra) = self.benv.step(
+            jnp.array(vrngs), state, action, extra
+        )
 
-		rollout = self.student_rollout.append(rollout, *step)
+        next_start_state = jax.vmap(_tree_util.pytree_select)(
+            done, next_state, start_state
+        )
 
-		if self.render:
-			self.viz.render(
-				self.benv.env.params, 
-				jax.tree_util.tree_map(lambda x: x[0][0], state))
+        # Add transition to storage
+        step = (obs, action, reward, done, log_pi, value)
+        if carry is not None:
+            step += (carry,)
 
-		return (
-			rollout, 
-			next_state,
-			next_start_state, 
-			next_obs, 
-			next_carry, 
-			done, 
-			info, 
-			extra
-		)
+        rollout = self.student_rollout.append(rollout, *step)
 
-	@partial(jax.jit, static_argnums=(0,))
-	def _rollout_students(
-		self, 
-		rng, 
-		train_state, 
-		state, 
-		start_state, 
-		obs, 
-		carry, 
-		done,
-		extra=None, 
-		ep_stats=None):
-		rollout = self.student_rollout.reset()
+        if self.render:
+            self.viz.render(
+                self.benv.env.params, jax.tree_util.tree_map(lambda x: x[0][0], state)
+            )
 
-		rngs = jax.random.split(rng, self.n_rollout_steps)
+        return (
+            rollout,
+            next_state,
+            next_start_state,
+            next_obs,
+            next_carry,
+            done,
+            info,
+            extra,
+        )
 
-		def _scan_rollout(scan_carry, rng):
-			rollout, state, start_state, obs, carry, done, extra, ep_stats, train_state = scan_carry 
+    @partial(jax.jit, static_argnums=(0,))
+    def _rollout_students(
+        self,
+        rng,
+        train_state,
+        state,
+        start_state,
+        obs,
+        carry,
+        done,
+        extra=None,
+        ep_stats=None,
+    ):
+        rollout = self.student_rollout.reset()
 
-			next_scan_carry = \
-				self._get_transition(
-					rng, 
-					self.student_pop, 
-					jax.lax.stop_gradient(train_state.params), 
-					rollout, 
-					state,
-					start_state, 
-					obs, 
-					carry,
-					done, 
-					extra)
-			(rollout, 
-			 next_state,
-			 next_start_state, 
-			 next_obs, 
-			 next_carry, 
-			 done, 
-			 info, 
-			 extra) = next_scan_carry
+        rngs = jax.random.split(rng, self.n_rollout_steps)
 
-			ep_stats = self._update_ep_stats(ep_stats, done, info)
+        def _scan_rollout(scan_carry, rng):
+            (
+                rollout,
+                state,
+                start_state,
+                obs,
+                carry,
+                done,
+                extra,
+                ep_stats,
+                train_state,
+            ) = scan_carry
 
-			return (
-				rollout, 
-				next_state,
-				next_start_state,
-				next_obs, 
-				next_carry,
-				done,
-				extra, 
-				ep_stats,
-				train_state), None
+            next_scan_carry = self._get_transition(
+                rng,
+                self.student_pop,
+                jax.lax.stop_gradient(train_state.params),
+                rollout,
+                state,
+                start_state,
+                obs,
+                carry,
+                done,
+                extra,
+            )
+            (
+                rollout,
+                next_state,
+                next_start_state,
+                next_obs,
+                next_carry,
+                done,
+                info,
+                extra,
+            ) = next_scan_carry
 
-		(rollout, 
-		 state, 
-		 start_state, 
-		 obs, 
-		 carry, 
-		 done,
-		 extra, 
-		 ep_stats,
-		 train_state), _ = jax.lax.scan(
-			_scan_rollout,
-			(rollout, 
-			 state, 
-			 start_state,
-			 obs, 
-			 carry, 
-			 done,
-			 extra, 
-			 ep_stats,
-			 train_state),
-			rngs,
-			length=self.n_rollout_steps,
-		)
+            ep_stats = self._update_ep_stats(ep_stats, done, info)
 
-		return rollout, state, start_state, obs, carry, extra, ep_stats, train_state
+            return (
+                rollout,
+                next_state,
+                next_start_state,
+                next_obs,
+                next_carry,
+                done,
+                extra,
+                ep_stats,
+                train_state,
+            ), None
 
-	@partial(jax.jit, static_argnums=(0,))
-	def _compile_stats(self, update_stats, ep_stats, env_metrics=None):
-		stats = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(
-			{k:ep_stats[k] for k in self.rolling_stats.names}
-		)
-		stats.update(update_stats)
+        (
+            rollout,
+            state,
+            start_state,
+            obs,
+            carry,
+            done,
+            extra,
+            ep_stats,
+            train_state,
+        ), _ = jax.lax.scan(
+            _scan_rollout,
+            (
+                rollout,
+                state,
+                start_state,
+                obs,
+                carry,
+                done,
+                extra,
+                ep_stats,
+                train_state,
+            ),
+            rngs,
+            length=self.n_rollout_steps,
+        )
 
-		if self.n_students > 1:
-			_stats = {}
-			for i in range(self.n_students):
-				_student_stats = jax.tree_util.tree_map(lambda x: x[i], stats) # for agent0
-				_stats.update({f'a{i}/{k}':v for k,v in _student_stats.items()})
-			stats = _stats
+        return rollout, state, start_state, obs, carry, extra, ep_stats, train_state
 
-		if self.track_env_metrics:
-			mean_env_metrics = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(env_metrics)
-			mean_env_metrics = {f'env/{k}':v for k,v in mean_env_metrics.items()}
+    @partial(jax.jit, static_argnums=(0,))
+    def _compile_stats(self, update_stats, ep_stats, env_metrics=None):
+        stats = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(
+            {k: ep_stats[k] for k in self.rolling_stats.names}
+        )
+        stats.update(update_stats)
 
-			if self.n_students > 1:
-				_env_metrics = {}
-				for i in range(self.n_students):
-					_student_env_metrics = jax.tree_util.tree_map(lambda x: x[i], mean_env_metrics) # for agent0
-					_env_metrics.update({f'{k}_a{i}':v for k,v in _student_env_metrics.items()})
-				mean_env_metrics = _env_metrics
+        if self.n_students > 1:
+            _stats = {}
+            for i in range(self.n_students):
+                _student_stats = jax.tree_util.tree_map(
+                    lambda x: x[i], stats
+                )  # for agent0
+                _stats.update({f"a{i}/{k}": v for k, v in _student_stats.items()})
+            stats = _stats
 
-			stats.update(mean_env_metrics)
+        if self.track_env_metrics:
+            mean_env_metrics = jax.vmap(
+                lambda info: jax.tree_map(lambda x: x.mean(), info)
+            )(env_metrics)
+            mean_env_metrics = {f"env/{k}": v for k, v in mean_env_metrics.items()}
 
-		if self.n_students == 1:
-			stats = jax.tree_map(lambda x: x[0], stats)
+            if self.n_students > 1:
+                _env_metrics = {}
+                for i in range(self.n_students):
+                    _student_env_metrics = jax.tree_util.tree_map(
+                        lambda x: x[i], mean_env_metrics
+                    )  # for agent0
+                    _env_metrics.update(
+                        {f"{k}_a{i}": v for k, v in _student_env_metrics.items()}
+                    )
+                mean_env_metrics = _env_metrics
 
-		if self.n_devices > 1:
-			stats = jax.tree_map(lambda x: jax.lax.pmean(x, 'device'), stats)
+            stats.update(mean_env_metrics)
 
-		return stats
+        if self.n_students == 1:
+            stats = jax.tree_map(lambda x: x[0], stats)
 
-	def get_shmap_spec(self):
-		runner_state_size = len(inspect.signature(self.run).parameters)
-		in_spec = [P(None,'device'),]*(runner_state_size)
-		out_spec = [P(None,'device'),]*(runner_state_size)
+        if self.n_devices > 1:
+            stats = jax.tree_map(lambda x: jax.lax.pmean(x, "device"), stats)
 
-		in_spec[:2] = [P(None),]*2
-		in_spec = tuple(in_spec)
-		out_spec = (P(None),) + in_spec
+        return stats
 
-		return in_spec, out_spec
+    def get_shmap_spec(self):
+        runner_state_size = len(inspect.signature(self.run).parameters)
+        in_spec = [
+            P(None, "device"),
+        ] * (runner_state_size)
+        out_spec = [
+            P(None, "device"),
+        ] * (runner_state_size)
 
-	@partial(jax.jit, static_argnums=(0,))
-	def run(
-		self, 
-		rng, 
-		train_state, 
-		state, 
-		start_state,
-		obs, 
-		carry=None, 
-		extra=None, 
-		ep_stats=None):
-		"""
-		Perform one update step: rollout all students and teachers + update with PPO
-		"""
-		if self.n_devices > 1:
-			rng = jax.random.fold_in(rng, jax.lax.axis_index('device'))
+        in_spec[:2] = [
+            P(None),
+        ] * 2
+        in_spec = tuple(in_spec)
+        out_spec = (P(None),) + in_spec
 
-		rng, *vrngs = jax.random.split(rng, self.n_students+1)
-		rollout_batch_shape = (self.n_students, self.n_parallel*self.n_eval)
+        return in_spec, out_spec
 
-		obs, state, extra = self.benv.reset(jnp.array(vrngs))
-		ep_stats = self.rolling_stats.reset_stats(
-			batch_shape=rollout_batch_shape)
+    @partial(jax.jit, static_argnums=(0,))
+    def run(
+        self,
+        rng,
+        train_state,
+        state,
+        start_state,
+        obs,
+        carry=None,
+        extra=None,
+        ep_stats=None,
+    ):
+        """
+        Perform one update step: rollout all students and teachers + update with PPO
+        """
+        if self.n_devices > 1:
+            rng = jax.random.fold_in(rng, jax.lax.axis_index("device"))
 
-		rollout_start_state = state
+        rng, *vrngs = jax.random.split(rng, self.n_students + 1)
+        rollout_batch_shape = (self.n_students, self.n_parallel * self.n_eval)
 
-		done = jnp.zeros(rollout_batch_shape, dtype=jnp.bool_)
-		rng, subrng = jax.random.split(rng)
-		rollout, state, start_state, obs, carry, extra, ep_stats, train_state = \
-			self._rollout_students(
-				subrng, 
-				train_state, 
-				state, 
-				start_state,
-				obs, 
-				carry, 
-				done,
-				extra, 
-				ep_stats
-			)
+        obs, state, extra = self.benv.reset(jnp.array(vrngs))
+        ep_stats = self.rolling_stats.reset_stats(batch_shape=rollout_batch_shape)
 
-		train_batch = self.student_rollout.get_batch(
-			rollout, 
-			self.student_pop.get_value(
-				jax.lax.stop_gradient(train_state.params), 
-				obs, 
-				carry,
-			)
-		)
+        rollout_start_state = state
 
-		# PPOAgent vmaps over the train state and batch. Batch must be N x EM
-		rng, subrng = jax.random.split(rng)
-		train_state, update_stats = self.student_pop.update(subrng, train_state, train_batch)
+        done = jnp.zeros(rollout_batch_shape, dtype=jnp.bool_)
+        rng, subrng = jax.random.split(rng)
+        rollout, state, start_state, obs, carry, extra, ep_stats, train_state = (
+            self._rollout_students(
+                subrng,
+                train_state,
+                state,
+                start_state,
+                obs,
+                carry,
+                done,
+                extra,
+                ep_stats,
+            )
+        )
 
-		# Collect env metrics
-		if self.track_env_metrics:
-			env_metrics = self.benv.get_env_metrics(rollout_start_state)
-		else:
-			env_metrics = None
+        train_batch = self.student_rollout.get_batch(
+            rollout,
+            self.student_pop.get_value(
+                jax.lax.stop_gradient(train_state.params),
+                obs,
+                carry,
+            ),
+        )
 
-		stats = self._compile_stats(update_stats, ep_stats, env_metrics)
-		stats.update(dict(n_updates=train_state.n_updates[0]))
+        # PPOAgent vmaps over the train state and batch. Batch must be N x EM
+        rng, subrng = jax.random.split(rng)
+        train_state, update_stats = self.student_pop.update(
+            subrng, train_state, train_batch
+        )
 
-		train_state = train_state.increment()
-		self.n_updates += 1
+        # Collect env metrics
+        if self.track_env_metrics:
+            env_metrics = self.benv.get_env_metrics(rollout_start_state)
+        else:
+            env_metrics = None
 
-		return (
-			stats, 
-			rng, 
-			train_state, 
-			state, 
-			start_state, 
-			obs, 
-			carry, 
-			extra, 
-			ep_stats
-		)
+        stats = self._compile_stats(update_stats, ep_stats, env_metrics)
+        stats.update(dict(n_updates=train_state.n_updates[0]))
+
+        train_state = train_state.increment()
+        self.n_updates += 1
+
+        return (
+            stats,
+            rng,
+            train_state,
+            state,
+            start_state,
+            obs,
+            carry,
+            extra,
+            ep_stats,
+        )

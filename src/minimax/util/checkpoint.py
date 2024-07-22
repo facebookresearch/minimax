@@ -35,14 +35,9 @@ def load_pkl_object(path: str):
     return obj
 
 
-def safe_checkpoint(
-    state, 
-    dir_path, 
-    name, 
-    index=None, 
-    archive_interval=None):
-    savename = f'{name}.pkl'
-    tmp_savepath = f'{name}_tmp.pkl'
+def safe_checkpoint(state, dir_path, name, index=None, archive_interval=None):
+    savename = f"{name}.pkl"
+    tmp_savepath = f"{name}_tmp.pkl"
 
     save_path = os.path.join(dir_path, savename)
     tmp_savepath = os.path.join(dir_path, tmp_savepath)
@@ -55,20 +50,18 @@ def safe_checkpoint(
     # Archive if needed
     if index is not None and archive_interval is not None and archive_interval > 0:
         if index % archive_interval == 0:
-            archive_path = os.path.join(dir_path, f'{name}_{index}.pkl')
+            archive_path = os.path.join(dir_path, f"{name}_{index}.pkl")
             shutil.copy(save_path, archive_path)
 
 
 def load_config(path: str):
     with open(path) as meta_file:
-        _config = json.load(meta_file)['config']
+        _config = json.load(meta_file)["config"]
 
     config = {}
-    for k,v in _config.items():
+    for k, v in _config.items():
         if isinstance(v, dict):
             v = DefaultDotDict(v)
         config[k] = v
 
     return DefaultDotDict(config)
-
-

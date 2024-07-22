@@ -16,70 +16,68 @@ from minimax.envs.environment import Environment, EnvState
 
 
 class UEDEnvWrapper:
-	"""
-	Abstract base class for an env wrapper.
-	"""
-	def __init__(self, env):
-		self._env = env
+    """
+    Abstract base class for an env wrapper.
+    """
 
-		self._wrap_level = 1
-		while hasattr(env, '_env'):
-			if not isinstance(env, Environment):
-				self._wrap_level += 1
+    def __init__(self, env):
+        self._env = env
 
-			env = env._env
+        self._wrap_level = 1
+        while hasattr(env, "_env"):
+            if not isinstance(env, Environment):
+                self._wrap_level += 1
 
-	@classmethod
-	def is_compatible(cls, env):
-		return True
+            env = env._env
 
-	@property
-	def base_env(self):
-		env = self
-		for i in range(self._wrap_level):
-			env = env._env
+    @classmethod
+    def is_compatible(cls, env):
+        return True
 
-		return env
+    @property
+    def base_env(self):
+        env = self
+        for i in range(self._wrap_level):
+            env = env._env
 
-	def reset_extra(self):
-		return {}
+        return env
 
-	def get_monitored_metrics(self):
-		if self._wrap_level > 1:
-			return self._env.get_monitored_metrics()
-		return ()
+    def reset_extra(self):
+        return {}
 
-	def _append_extra_to_tuple(self, _tuple, extra=None):
-		if extra is None:
-			extra = self.reset_extra()
+    def get_monitored_metrics(self):
+        if self._wrap_level > 1:
+            return self._env.get_monitored_metrics()
+        return ()
 
-		if self._wrap_level > 1:
-			_tuple[-1].update(extra)
-		else:
-			_tuple = _tuple + (extra,)
+    def _append_extra_to_tuple(self, _tuple, extra=None):
+        if extra is None:
+            extra = self.reset_extra()
 
-		return _tuple
+        if self._wrap_level > 1:
+            _tuple[-1].update(extra)
+        else:
+            _tuple = _tuple + (extra,)
 
-	def reset_teacher(
-		self, 
-		rng: chex.PRNGKey 
-	) -> Tuple[chex.ArrayTree, EnvState]:
-		_tuple = self._env.reset_teacher(rng)
+        return _tuple
 
-		return self._append_extra_to_tuple(_tuple)
+    def reset_teacher(self, rng: chex.PRNGKey) -> Tuple[chex.ArrayTree, EnvState]:
+        _tuple = self._env.reset_teacher(rng)
 
-	def step_teacher(
-		self,
-		rng: chex.PRNGKey,
-		ued_state: EnvState,
-		action: Union[int, float],
-		extra: dict = None,
-	) -> Tuple[chex.ArrayTree, EnvState, float, bool, dict]:
-		if self._wrap_level > 1:
-			return self._env.step_teacher(rng, ued_state, action, extra)
-		else:
-			_tuple = self._env.step_teacher(rng, ued_state, action)
-			return self._append_extra_to_tuple(_tuple)
+        return self._append_extra_to_tuple(_tuple)
 
-	def __getattr__(self, attr):
-		return getattr(self._env, attr)
+    def step_teacher(
+        self,
+        rng: chex.PRNGKey,
+        ued_state: EnvState,
+        action: Union[int, float],
+        extra: dict = None,
+    ) -> Tuple[chex.ArrayTree, EnvState, float, bool, dict]:
+        if self._wrap_level > 1:
+            return self._env.step_teacher(rng, ued_state, action, extra)
+        else:
+            _tuple = self._env.step_teacher(rng, ued_state, action)
+            return self._append_extra_to_tuple(_tuple)
+
+    def __getattr__(self, attr):
+        return getattr(self._env, attr)
