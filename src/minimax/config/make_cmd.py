@@ -16,14 +16,17 @@ import numpy as np
 from minimax.util.dotdict import DefaultDotDict
 import minimax.config.xpid_maker as xpid_maker
 
+from pprint import pprint
 
 def get_wandb_config():
     wandb_config_path = os.path.join(
         os.path.abspath(os.getcwd()), "config", "wandb.json"
     )
+    #print(wandb_config_path)
     if os.path.exists(wandb_config_path):
         with open(wandb_config_path, "r") as config_file:
             config = json.load(config_file)
+            #print(config)
             if len(config) == 2:
                 return {
                     "wandb_base_url": config["base_url"],
@@ -214,6 +217,7 @@ def setup_config_dir():
 
 
 if __name__ == "__main__":
+
     args = parse_args()
 
     # Default parameters
@@ -224,6 +228,7 @@ if __name__ == "__main__":
     setup_config_dir()
 
     json_filename = args.config
+    #print(json_filename)
     if not json_filename.endswith(".json"):
         json_filename += ".json"
 
@@ -233,11 +238,12 @@ if __name__ == "__main__":
     config = json.load(open(grid_path))
     cmd = config.get("cmd", "train")
     grid = config["args"]
+    pprint(grid)
     xpid_prefix = "" if "xpid_prefix" not in config else config["xpid_prefix"]
 
     if args.checkpoint:
         params["checkpoint"] = True
-
+    #print(grid)
     if "wandb_project" in grid:
         params["wandb_project"] = args.wandb_project
 
@@ -245,11 +251,13 @@ if __name__ == "__main__":
             params["wandb_base_url"] = args.wandb_base_url
         if args.wandb_api_key:
             params["wandb_api_key"] = args.wandb_api_key
-
+        pprint(params)
         params.update(get_wandb_config())
 
+    pprint(params)
     # Generate all parameter combinations within grid, using defaults for fixed params
     all_params = generate_all_params_for_grid(grid, defaults=params)
+    pprint(all_params)
 
     unique_xpids = None
     if args.count:
