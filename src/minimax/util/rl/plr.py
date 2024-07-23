@@ -28,7 +28,8 @@ class PLRBuffer(struct.PyTreeNode):
     n_mutations: chex.Array
 
     ued_score: int = struct.field(
-        pytree_node=False, default=UEDScore.L1_VALUE_LOSS.value
+        pytree_node=False, 
+        default=UEDScore.L1_VALUE_LOSS.value
     )
     replay_prob: float = struct.field(pytree_node=False, default=0.5)
     buffer_size: int = struct.field(pytree_node=False, default=100)
@@ -151,7 +152,7 @@ class PLRManager:
 
     partial(jax.jit, static_argnums=(0,))
 
-    def _get_next_insert_idx(self, plr_buffer):
+    def _get_next_insert_idx(self, plr_buffer:PLRBuffer):
         return jax.lax.cond(
             jnp.greater(plr_buffer.buffer_size, plr_buffer.filled_count[0]),
             lambda *_: plr_buffer.filled_count[0],
@@ -163,7 +164,7 @@ class PLRManager:
         )
 
     @partial(jax.jit, static_argnums=(0, 3))
-    def _sample_replay_levels(self, rng, plr_buffer, n):
+    def _sample_replay_levels(self, rng, plr_buffer:PLRBuffer, n):
         def _sample_replay_level(carry, step):
             ages = carry
             subrng = step
@@ -190,7 +191,7 @@ class PLRManager:
 
         return replay_levels, replay_idxs, next_plr_buffer
 
-    def _sample_buffer_uniform(self, rng, plr_buffer, n):
+    def _sample_buffer_uniform(self, rng, plr_buffer:PLRBuffer, n):
         rand_idxs = jax.random.choice(
             rng, np.arange(self.buffer_size), shape=(n,), p=plr_buffer.filled
         )

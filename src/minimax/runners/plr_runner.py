@@ -389,7 +389,7 @@ class PLRRunner(DRRunner):
     @partial(jax.jit, static_argnums=(0,))
     def run(
         self,
-        rng,
+        rng:int,
         train_state,
         state,
         start_state,
