@@ -237,7 +237,7 @@ if __name__ == "__main__":
     config = json.load(open(grid_path))
     cmd = config.get("cmd", "train")
     grid = config["args"]
-    pprint(grid)
+    #pprint(grid)
     xpid_prefix = "" if "xpid_prefix" not in config else config["xpid_prefix"]
 
     if args.checkpoint:
@@ -250,14 +250,14 @@ if __name__ == "__main__":
             params["wandb_base_url"] = args.wandb_base_url
         if args.wandb_api_key:
             params["wandb_api_key"] = args.wandb_api_key
-        pprint(params)
+        #pprint(params)
         params.update(get_wandb_config())
 
-    pprint(params)
+    #pprint(params)
     # Generate all parameter combinations within grid, using defaults for fixed params
     all_params = generate_all_params_for_grid(grid, defaults=params)
-    pprint(all_params)
 
+    #pprint(all_params)
     unique_xpids = None
     if args.count:
         unique_xpids = set()
