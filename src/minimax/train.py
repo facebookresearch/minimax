@@ -51,8 +51,8 @@ if __name__ == "__main__":
         if wandb_args.base_url:
             os.environ["WANDB_BASE_URL"] = wandb_args.base_url
         if wandb_args.api_key:
-            os.environ["WANDB_API_KEY"] = wandb_args.api_key
-        if wandb_args.base_url and wandb_args.api_key:
+             os.environ["WANDB_API_KEY"] = wandb_args.api_key
+        if wandb_args.base_url or wandb_args.api_key:
             os.environ["WANDB_CACHE_DIR"] = "~/.cache/wandb"
             wandb.init(
                 project=wandb_args.project,
