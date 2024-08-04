@@ -18,6 +18,7 @@ dist/
 **/results/
 **/images/
 **/wandb/
+**/config/
 **/figures/
 **/config/wandb.json
 !docs/images
