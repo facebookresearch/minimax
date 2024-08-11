@@ -50,7 +50,7 @@ def generate_train_cmds(
 	for t in range(num_trials):
 		params['seed'] = start_seed + t + start_index
 
-		_cmd = [f'python -m {cmd}']
+		_cmd = [f'python -m minimax.{cmd}']
 
 		trial_idx = t + start_index
 		for k,v in params.items():

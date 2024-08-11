@@ -190,7 +190,7 @@ class PPOAgent(Agent):
 
 		return train_state, loss_stats
 
-	@partial(jax.jit, static_argnums=(0,2,4))
+	@partial(jax.jit, static_argnums=(0,2))
 	def _loss(
 		self, 
 		params,

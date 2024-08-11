@@ -393,10 +393,10 @@ class PAIREDRunner:
 		mean_returns_by_student = jax.vmap(lambda x: x.mean())(ep_stats['return'])
 		mean_returns_by_teacher = jax.vmap(lambda x: x.mean())(ued_ep_stats['return'])
 
-		mean_ep_stats = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(
+		mean_ep_stats = jax.vmap(lambda info: jax.tree.map(lambda x: x.mean(), info))(
 			{k:ep_stats[k] for k in self.rolling_stats.names}
 		)
-		ued_mean_ep_stats = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(
+		ued_mean_ep_stats = jax.vmap(lambda info: jax.tree.map(lambda x: x.mean(), info))(
 			{k:ued_ep_stats[k] for k in self.ued_rolling_stats.names}
 		)
 
@@ -411,7 +411,7 @@ class PAIREDRunner:
 			stats.update({f'{k}_a{i}':v for k,v in _student_stats.items()})
 
 		teacher_stats = {
-			f'mean_{k}_tch':v for k,v in ued_mean_ep_stats.items()
+			f'mean_{k}_tch':v[0] for k,v in ued_mean_ep_stats.items()
 		}
 		teacher_stats.update({
 			f'{k}_tch':v[0] for k,v in ued_update_stats.items()
@@ -419,6 +419,10 @@ class PAIREDRunner:
 		stats.update(teacher_stats)
 
 		if self.track_env_metrics:
+			for k,v in env_metrics.items():
+				if 'shortest_path' in k:
+					env_metrics.update({k:jnp.max(v)})  # Track max shortest path length
+
 			passable_mask = env_metrics.pop('passable')
 			mean_env_metrics = jax.tree_util.tree_map(
 				lambda x: (x*passable_mask).sum()/passable_mask.sum(), 
@@ -430,7 +434,7 @@ class PAIREDRunner:
 			})
 
 		if self.n_devices > 1:
-			stats = jax.tree_map(lambda x: jax.lax.pmean(x, 'device'), stats)
+			stats = jax.tree.map(lambda x: jax.lax.pmean(x, 'device'), stats)
 
 		return stats
 

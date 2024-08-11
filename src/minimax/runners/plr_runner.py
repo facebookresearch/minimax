@@ -203,6 +203,7 @@ class PLRRunner(DRRunner):
 
 		rng, subrng = jax.random.split(rng)
 		start_state = state
+		reset_state = state
 		rollout, state, start_state, obs, carry, extra, ep_stats, train_state = \
 			self._rollout_students(
 				subrng, 
@@ -212,6 +213,7 @@ class PLRRunner(DRRunner):
 				obs, 
 				carry, 
 				done,
+				reset_state,
 				extra, 
 				ep_stats
 			)
@@ -331,27 +333,57 @@ class PLRRunner(DRRunner):
 		return train_state, stats
 
 	@partial(jax.jit, static_argnums=(0,))
-	def _compile_stats(self, update_stats, ep_stats, env_metrics=None, plr_stats=None):
-		stats = super()._compile_stats(update_stats, ep_stats, env_metrics)
+	def _compile_stats(self, update_stats, ep_stats, is_replay, env_metrics=None, plr_stats=None):
+		stats = super()._compile_stats(update_stats, ep_stats, env_metrics, mask_passable=False)
+
+		if self.track_env_metrics:
+			if self.use_parallel_eval:
+				env_passable_mask = env_metrics.pop('env/passable')
+				env_env_metrics = {k:v for k,v in env_metrics.items() if k.startswith('env/')}
+				env_env_metrics = jax.vmap(lambda info, mask: jax.tree.map(lambda x: (x*mask).sum()/mask.sum(), info))(env_env_metrics, env_passable_mask)
+				env_env_metrics.update({'env/passable_ratio': jax.vmap(lambda x: x.mean())(env_passable_mask)})
+				env_metrics.update(env_env_metrics)
+
+				plr_passable_mask = env_metrics.pop('plr/passable')
+				plr_env_metrics = {k:v for k,v in env_metrics.items() if k.startswith('plr/')}
+				plr_env_metrics = jax.vmap(lambda info, mask: jax.tree.map(lambda x: (x*mask).sum()/mask.sum(), info))(plr_env_metrics, plr_passable_mask)
+				plr_env_metrics.update({'plr/passable_ratio': jax.vmap(lambda x: x.mean())(plr_passable_mask)})
+				env_metrics.update(plr_env_metrics)
+			else:
+				passable_mask = env_metrics.pop('passable')
+				env_metrics = jax.vmap(lambda info, mask: jax.tree.map(lambda x: (x*mask).sum()/mask.sum(), info))(env_metrics, passable_mask)
+				env_metrics.update({'passable_ratio': jax.vmap(lambda x: x.mean())(passable_mask)})
+
+			if not self.use_parallel_eval:
+				_env_metrics = jax.vmap(lambda cond: jax.lax.cond(
+					cond,
+					lambda *_: {f'env/{k}':-jnp.inf for k,_ in env_metrics.items()},
+					lambda *_: {f'env/{k}':v.mean() for k,v in env_metrics.items()}
+				))(is_replay)
+
+				plr_env_metrics = jax.vmap(lambda cond: jax.lax.cond(
+					cond,
+					lambda *_: {f'plr/{k}':v.mean() for k,v in env_metrics.items()},
+					lambda *_: {f'plr/{k}':-jnp.inf for k,_ in env_metrics.items()},
+				))(is_replay)
+
+				stats.update(jax.tree.map(lambda x: x[0], plr_env_metrics))
+				stats.update(jax.tree.map(lambda x: x[0], _env_metrics))
+			else:
+				stats = {k:v for k,v in stats.items() if not k.startswith('env/')}
+				env_metrics = {k:v.mean() for k,v in env_metrics.items()}
+				stats.update(env_metrics)
 
 		if plr_stats is not None:
-			plr_stats = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(plr_stats)
-
-		if self.n_students > 1:
-			_plr_stats = {}
-			for i in range(self.n_students):
-				_student_plr_stats = jax.tree_util.tree_map(lambda x: x[i], plr_stats) # for agent0
-				_plr_stats.update({f'{k}_a{i}':v for k,v in _student_plr_stats.items()})
-			plr_stats = _plr_stats
-		else:
-			plr_stats = jax.tree_map(lambda x: x[0], plr_stats) 
-
-		stats.update({f'plr_{k}':v for k,v in plr_stats.items()})
+			plr_stats = jax.vmap(lambda info: jax.tree_util.tree_map(lambda x: x.mean(), info))(plr_stats)
+			plr_stats = jax.tree.map(lambda x: x[0], plr_stats)
+			stats.update({f'plr/{k}':v for k,v in plr_stats.items()})
 
 		if self.n_devices > 1:
-			stats = jax.tree_map(lambda x: jax.lax.pmean(x, 'device'), stats)
+			stats = jax.tree.map(lambda x: jax.lax.pmean(x, 'device'), stats)
 
 		return stats
+
 
 	@partial(jax.jit, static_argnums=(0,))
 	def run(
@@ -490,13 +522,23 @@ class PLRRunner(DRRunner):
 
 		# Collect training env metrics
 		if self.track_env_metrics:
-			env_metrics = self.benv.get_env_metrics(levels)
+			if self.use_parallel_eval:
+				new_levels = jax.tree.map(lambda x: x.at[:,:n_level_samples].get(), levels)
+				replay_levels = jax.tree.map(lambda x: x.at[:,n_level_samples:2*n_level_samples].get(), levels)
+				new_level_metrics = self.benv.get_env_metrics(new_levels)
+				replay_level_metrics = self.benv.get_env_metrics(replay_levels)
+				env_metrics = {f'env/{k}':v for k,v in new_level_metrics.items()}
+				env_metrics.update({
+						f'plr/{k}':v for k,v in replay_level_metrics.items()
+				})
+			else:
+				env_metrics = self.benv.get_env_metrics(levels)
 		else:
 			env_metrics = None
 
 		plr_stats = self.plr_mgr.get_metrics(train_state.plr_buffer)
 
-		stats = self._compile_stats(update_stats, ep_stats, env_metrics, plr_stats)
+		stats = self._compile_stats(update_stats, ep_stats, is_replay, env_metrics, plr_stats)
 
 		if self.n_devices > 1:
 			plr_buffer = train_state.plr_buffer

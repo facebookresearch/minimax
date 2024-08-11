@@ -1,6 +1,6 @@
 [project]
 name = "minimax-lib"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
   {name="Minqi Jiang"}, 
   {email="msj@meta.com"},
@@ -8,7 +8,7 @@ authors = [
 description = "Efficient baselines for autocurricula in JAX"
 readme = "README.md"
 license = {text = "Apache 2.0"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent"
@@ -16,14 +16,16 @@ classifiers = [
 dependencies = [
   "numpy>=1.25,<1.26",
   "pandas==1.5.3",
-  "jax>=0.4.19",
-  "jaxlib>=0.4.19",
+  "jax>=0.4.31",
+  "jaxlib>=0.4.31",
   "flax>=0.7.4",
   "optax>=0.1.7",
+  "tensorflow_probability==0.23.0",
   "chex>=0.1.83",
   "wandb>=0.13",
   "ipython>=7.34.0",
-  "GitPython>=3.1.29"
+  "GitPython>=3.1.29",
+  "tqdm>=4.66.1"
 ]
 
 [tool.hatchling.scripts]

@@ -199,6 +199,7 @@ class DRRunner:
 		obs, 
 		carry, 
 		done,
+		reset_state=None,
 		extra=None):
 		# Sample action
 		value, pi_params, next_carry = pop.act(params, obs, carry, done)
@@ -214,7 +215,7 @@ class DRRunner:
 		 reward, 
 		 done, 
 		 info, 
-		 extra) = self.benv.step(jnp.array(vrngs), state, action, extra)
+		 extra) = self.benv.step(jnp.array(vrngs), state, action, reset_state, extra)
 
 		next_start_state = jax.vmap(_tree_util.pytree_select)(
 			done, next_state, start_state
@@ -253,6 +254,7 @@ class DRRunner:
 		obs, 
 		carry, 
 		done,
+		reset_state=None,
 		extra=None, 
 		ep_stats=None):
 		rollout = self.student_rollout.reset()
@@ -272,7 +274,8 @@ class DRRunner:
 					start_state, 
 					obs, 
 					carry,
-					done, 
+					done,
+					reset_state, 
 					extra)
 			(rollout, 
 			 next_state,
@@ -321,8 +324,8 @@ class DRRunner:
 
 		return rollout, state, start_state, obs, carry, extra, ep_stats, train_state
 
-	@partial(jax.jit, static_argnums=(0,))
-	def _compile_stats(self, update_stats, ep_stats, env_metrics=None):
+	@partial(jax.jit, static_argnums=(0,4))
+	def _compile_stats(self, update_stats, ep_stats, env_metrics=None, mask_passable=True):
 		stats = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(
 			{k:ep_stats[k] for k in self.rolling_stats.names}
 		)
@@ -336,8 +339,14 @@ class DRRunner:
 			stats = _stats
 
 		if self.track_env_metrics:
-			mean_env_metrics = jax.vmap(lambda info: jax.tree_map(lambda x: x.mean(), info))(env_metrics)
-			mean_env_metrics = {f'env/{k}':v for k,v in mean_env_metrics.items()}
+			if mask_passable:
+				passable_mask = env_metrics.pop('passable')
+				mean_env_metrics = jax.vmap(lambda info, mask: jax.tree.map(lambda x: (x*mask).sum()/mask.sum(), info))(env_metrics, passable_mask)
+				mean_env_metrics = {f'env/{k}':v for k,v in mean_env_metrics.items()}
+				mean_env_metrics.update({'env/passable_ratio': jax.vmap(lambda x: x.mean())(passable_mask)})
+			else:
+				mean_env_metrics = jax.vmap(lambda info: jax.tree.map(lambda x: x.mean(), info))(env_metrics)
+				mean_env_metrics = {f'env/{k}':v for k,v in mean_env_metrics.items()}
 
 			if self.n_students > 1:
 				_env_metrics = {}
@@ -394,6 +403,7 @@ class DRRunner:
 		rollout_start_state = state
 
 		done = jnp.zeros(rollout_batch_shape, dtype=jnp.bool_)
+		reset_state = None  # Sample new environment on reset
 		rng, subrng = jax.random.split(rng)
 		rollout, state, start_state, obs, carry, extra, ep_stats, train_state = \
 			self._rollout_students(
@@ -404,7 +414,8 @@ class DRRunner:
 				obs, 
 				carry, 
 				done,
-				extra, 
+				reset_state,
+				extra,
 				ep_stats
 			)
 
