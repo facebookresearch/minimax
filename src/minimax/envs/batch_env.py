@@ -57,10 +57,10 @@ class BatchEnv:
 		return obs, state, extra
 
 	@partial(jax.jit, static_argnums=0)
-	def _step(self, rng, state, action, extra):
+	def _step(self, rng, state, action, reset_state, extra):
 		brngs = jax.random.split(rng, self.sub_batch_size)
 		return jax.vmap(self.env.step, in_axes=(0, 0, 0, 0, 0))(
-			brngs, state, action, None, extra)
+			brngs, state, action, reset_state, extra)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def _get_env_metrics(self, state):

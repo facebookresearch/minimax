@@ -174,7 +174,7 @@ class EvalRunner:
 
         rng, *vrngs = jax.random.split(rng, self.pop.n_agents+1)
 
-        step_args = (jnp.array(vrngs), state, action, extra)
+        step_args = (jnp.array(vrngs), state, action, None, extra)
         (next_obs, 
          next_state, 
          reward, 

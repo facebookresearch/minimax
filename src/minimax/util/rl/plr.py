@@ -108,12 +108,12 @@ class PLRManager:
 		# Score dist
 		if self.use_score_ranks:
 			sorted_idx = jnp.argsort(-scores) # Top first
-			scores = jnp.zeros(self.buffer_size, dtype=jnp.int32)\
+			scores = jnp.zeros(self.buffer_size, dtype=jnp.float32)\
 					.at[sorted_idx]\
-					.set(1/jnp.arange(self.buffer_size))
+					.set(1.0/(1 + jnp.arange(self.buffer_size)))
 
 		scores = scores*filled
-		score_dist = scores/self.temp
+		score_dist = scores**(1/self.temp)
 		z = score_dist.sum()
 		z = jnp.where(jnp.equal(z,0),1,z)
 		score_dist = jax.lax.select(

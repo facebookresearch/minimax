@@ -25,3 +25,4 @@ src/*.egg-info
 **/.ipynb_checkpoints/
 config/
 !src/minimax/config
+build/
