@@ -143,14 +143,14 @@ class DRRunner:
 		params = self.student_pop.init_params(subrng, dummy_obs)
 
 		schedule_fn = optax.linear_schedule(
-			init_value=-float(self.lr),
-			end_value=-float(self.lr_final),
+			init_value=float(self.lr),
+			end_value=float(self.lr_final),
 			transition_steps=self.lr_anneal_steps,
 		)
 
 		tx = optax.chain(
 			optax.clip_by_global_norm(self.max_grad_norm),
-			optax.adam(learning_rate=float(self.lr), eps=self.adam_eps)
+			optax.adam(learning_rate=schedule_fn, eps=self.adam_eps)
 		)
 
 		train_state = VmapTrainState.create(
