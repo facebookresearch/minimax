@@ -391,6 +391,8 @@ class DRRunner:
 		Perform one update step: rollout all students and teachers + update with PPO
 		"""
 		if self.n_devices > 1:
+			# Return a shared next key; only the working key is device-specific.
+			next_rng, rng = jax.random.split(rng)
 			rng = jax.random.fold_in(rng, jax.lax.axis_index('device'))
 
 		rng, *vrngs = jax.random.split(rng, self.n_students+1)
@@ -443,6 +445,9 @@ class DRRunner:
 
 		train_state = train_state.increment()
 		self.n_updates += 1
+
+		if self.n_devices > 1:
+			rng = next_rng
 
 		return (
 			stats, 

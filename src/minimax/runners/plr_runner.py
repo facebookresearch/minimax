@@ -399,6 +399,8 @@ class PLRRunner(DRRunner):
 		plr_buffer=None):
 		# If device sharded, load sharded PLR buffer into train state
 		if self.n_devices > 1:
+			# Return a shared next key; only the working key is device-specific.
+			next_rng, rng = jax.random.split(rng)
 			rng = jax.random.fold_in(rng, jax.lax.axis_index('device'))
 			train_state = train_state.replace(plr_buffer=plr_buffer)
 
@@ -546,6 +548,9 @@ class PLRRunner(DRRunner):
 
 		train_state = train_state.increment()
 		stats.update(dict(n_updates=train_state.n_updates[0]))
+
+		if self.n_devices > 1:
+			rng = next_rng
 
 		return (
 			stats, 
