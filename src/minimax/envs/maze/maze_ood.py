@@ -569,7 +569,7 @@ class FourRooms(Maze):
 		# Randomize agent pos
 		key, subkey = jax.random.split(key)
 		agent_pos_mask = self.agent_pos_mask.at[goal_pos_idx].set(False)
-		agent_pos_idx = jax.random.choice(subkey, self.all_pos_idxs, shape=(), p=self.agent_pos_mask)
+		agent_pos_idx = jax.random.choice(subkey, self.all_pos_idxs, shape=(), p=agent_pos_mask)
 		agent_pos = jnp.array([agent_pos_idx%params.width, agent_pos_idx//params.width], dtype=jnp.uint32)
 
 		key, subkey = jax.random.split(key)
