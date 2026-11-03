@@ -76,14 +76,21 @@ class VmapTrainState(struct.PyTreeNode):
       n_updates=self.n_updates,
       n_grad_updates=self.n_grad_updates,
       params=self.params,
-      opt_state=self.opt_state
+      opt_state=self.opt_state,
+      plr_buffer=self.plr_buffer
     )
 
   def load_state_dict(self, state):
+    if "plr_buffer" not in state and self.plr_buffer is not None:
+      raise ValueError(
+        "Checkpoint is missing the PLR replay buffer and cannot resume training. "
+        "Legacy model parameters may still be used for evaluation."
+      )
     return self.replace(
       n_iters=state['n_iters'],
       n_updates=state['n_updates'],
       n_grad_updates=state['n_grad_updates'],
       params=state['params'],
-      opt_state=state['opt_state']
+      opt_state=state['opt_state'],
+      plr_buffer=state.get('plr_buffer')
     )
