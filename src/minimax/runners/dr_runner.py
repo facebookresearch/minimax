@@ -182,10 +182,12 @@ class DRRunner:
 		return _state
 
 	def load_checkpoint_state(self, runner_state, state):
-		runner_state = list(runner_state)
-		runner_state[1] = runner_state[1].load_state_dict(state[1])
+		# Keep saved RNG, environment, recurrent and curriculum state. The reset
+		# state supplies only the static apply function and optimizer objects.
+		restored = list(state)
+		restored[1] = runner_state[1].load_state_dict(state[1])
 
-		return tuple(runner_state)
+		return tuple(restored)
 
 	@partial(jax.jit, static_argnums=(0,2))
 	def _get_transition(
