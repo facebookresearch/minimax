@@ -34,7 +34,7 @@ class VmapTrainState(struct.PyTreeNode):
     new_params = optax.apply_updates(self.params, updates)
 
     return self.replace(
-        n_grad_updates=self.n_updates + 1,
+        n_grad_updates=self.n_grad_updates + 1,
         params=new_params,
         opt_state=new_opt_state,
         **kwargs,
