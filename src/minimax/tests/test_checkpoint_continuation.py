@@ -1,5 +1,10 @@
 """A checkpoint must preserve the next curriculum and learner update."""
 import pickle
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import jax
 import numpy as np
@@ -73,3 +78,54 @@ def test_legacy_non_plr_checkpoint_remains_complete():
     checkpoint[1].pop('plr_buffer', None)
     restored = runner.load_checkpoint_state(runner.reset(jax.random.PRNGKey(99)), checkpoint)
     assert_dynamic_state_equal(state, restored, exact=True)
+
+
+def _snapshot(state):
+    return [(str(path), np.asarray(value))
+            for path, value in jax.tree_util.tree_flatten_with_path(state)[0]]
+
+
+def _assert_snapshot(state, expected, *, exact):
+    actual = _snapshot(state)
+    assert [path for path, _ in actual] == [path for path, _ in expected]
+    for (_, value), (_, target) in zip(actual, expected):
+        assert value.dtype == target.dtype
+        if exact:
+            np.testing.assert_array_equal(value, target)
+        else:
+            np.testing.assert_allclose(value, target, atol=1e-7, rtol=1e-7)
+
+
+def _checkpoint_worker(mode, kind, folder):
+    runner = make_runner(kind)
+    payload_path = folder / 'checkpoint.pkl'
+    if mode == 'save':
+        state = runner.run(*runner.reset(jax.random.PRNGKey(7)))[1:]
+        payload = dict(producer_pid=os.getpid(), checkpoint=runner.get_checkpoint_state(state),
+                       current=_snapshot(state), next=_snapshot(runner.run(*state)))
+        payload_path.write_bytes(pickle.dumps(payload))
+    else:
+        payload = pickle.loads(payload_path.read_bytes())
+        restored = runner.load_checkpoint_state(runner.reset(jax.random.PRNGKey(99)),
+                                                 payload['checkpoint'])
+        _assert_snapshot(restored, payload['current'], exact=True)
+        _assert_snapshot(runner.run(*restored), payload['next'], exact=False)
+        (folder / 'result.json').write_text(json.dumps(dict(producer_pid=payload['producer_pid'],
+            consumer_pid=os.getpid(), restored_leaves=len(payload['current']),
+            next_update_leaves=len(payload['next']))))
+
+
+@pytest.mark.parametrize('kind', ['dr', 'plr', 'paired'])
+def test_checkpoint_continues_after_producer_process_exits(kind, tmp_path):
+    # The producer exits before the consumer starts. Static functions and
+    # optimizer objects must therefore come from a fresh interpreter and runner.
+    for mode in ['save', 'load']:
+        result = subprocess.run([sys.executable, str(Path(__file__).resolve()), mode,
+                                 kind, str(tmp_path)], capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+    receipt = json.loads((tmp_path / 'result.json').read_text())
+    assert receipt['restored_leaves'] > 0 and receipt['next_update_leaves'] > 0
+
+
+if __name__ == '__main__':
+    _checkpoint_worker(sys.argv[1], sys.argv[2], Path(sys.argv[3]))
