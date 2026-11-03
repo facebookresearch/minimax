@@ -168,8 +168,7 @@ class ExperimentRunner:
 		# ---- Set up device parallelism ----
 		self.n_devices = n_devices
 		if n_devices > 1:
-			dummy_runner_state = self.reset_train_runner(jax.random.PRNGKey(0))
-			self._shmap_run = self._make_shmap_run(dummy_runner_state)
+			self._shmap_run = self._make_shmap_run()
 		else:
 			self._shmap_run = None
 
@@ -198,7 +197,7 @@ class ExperimentRunner:
 
 		return stats, eval_stats, rng, *runner_state[1:]
 
-	def _make_shmap_run(self, runner_state):
+	def _make_shmap_run(self):
 		devices = mesh_utils.create_device_mesh((self.n_devices,))
 		mesh = Mesh(devices, axis_names=('device'))
 
