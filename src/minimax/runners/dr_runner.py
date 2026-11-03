@@ -397,6 +397,8 @@ class DRRunner:
 		rollout_batch_shape = (self.n_students, self.n_parallel*self.n_eval)
 
 		obs, state, extra = self.benv.reset(jnp.array(vrngs))
+		# Newly sampled levels start new episodes, including their recurrent state.
+		carry = jax.tree_util.tree_map(jnp.zeros_like, carry)
 		ep_stats = self.rolling_stats.reset_stats(
 			batch_shape=rollout_batch_shape)
 
